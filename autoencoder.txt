@@ -1,0 +1,113 @@
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from tensorflow import keras
+import matplotlib.pyplot as plt
+from sklearn.metrics import accuracy_score
+
+
+data = pd.read_csv('ecg.csv' , header=None)
+X = data.iloc[:, :-1].values
+y = data.iloc[:, -1].values
+
+x_train , x_test , y_train , y_test = train_test_split(X , y , test_size = 0.2 , random_state=42)
+
+low = x_train.min() 
+high = x_train.max()
+
+# standardise 
+x_train = (x_train - low) / (high - low)
+x_test = (x_test - low) / (high - low)
+
+x_train_normal = x_train[y_train == 1]
+
+encoder = keras.Sequential([
+    keras.Input(shape=(140 ,)),
+    keras.layers.Dense(64 , activation='relu'),
+    keras.layers.Dense(32 , activation='relu'),
+    keras.layers.Dense(16, activation='relu'),
+])
+encoder.summary()
+
+decoder = keras.Sequential([
+    keras.Input(shape=(16 ,)),
+    keras.layers.Dense(32 , activation='relu'),
+    keras.layers.Dense(64, activation='relu'),
+    keras.layers.Dense(140, activation='relu'),
+])
+
+decoder.summary()
+
+autoencoder = keras.Sequential([
+    encoder,
+    decoder
+])
+autoencoder.summary()
+
+autoencoder.compile(
+    optimizer='adam',
+    loss='mse',
+    metrics=['mae']
+)
+
+es = keras.callbacks.EarlyStopping(
+    patience=3,
+    monitor="val_loss",
+    restore_best_weights=True
+)
+
+history = autoencoder.fit(
+    x_train_normal,
+    x_train_normal,
+    epochs=50,
+    batch_size=32,
+    validation_split=0.2,
+    callbacks=[es],
+    verbose=1
+)
+
+plt.figure(figsize=(8, 5))
+
+plt.plot(history.history["loss"], label="Training Loss")
+plt.plot(history.history["val_loss"], label="Validation Loss")
+
+plt.xlabel("Epochs")
+plt.ylabel("MSE Loss")
+plt.title("Autoencoder Training and Validation Loss")
+plt.legend()
+plt.grid()
+plt.show()
+
+train_pred = autoencoder.predict(x_train_normal)
+
+train_error = np.mean((x_train_normal - train_pred)**2 , axis = 1)
+
+mean = np.mean(train_error)
+std = np.std(train_error)
+
+threshold = mean + 3*std
+
+
+print("Mean:", mean)
+print("Standard Deviation:", std)
+print("Threshold:", threshold)
+
+test_pred = autoencoder.predict(x_test)
+test_error = np.mean((x_test - test_pred)**2 , axis = 1)
+
+y_pred = (test_error > threshold).astype(int)
+
+print("Detected anomalies:", np.sum(y_pred))
+
+
+y_pred = np.where(test_error > threshold, 0, 1)
+
+from sklearn.metrics import classification_report, confusion_matrix
+
+print(confusion_matrix(y_test, y_pred))
+print(classification_report(y_test, y_pred))
+
+accuracy = accuracy_score(y_test, y_pred)
+
+print("Accuracy:", accuracy)
+print("Accuracy (%):", accuracy * 100)
