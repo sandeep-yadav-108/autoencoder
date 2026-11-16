@@ -1,0 +1,168 @@
+import nltk
+import numpy as np
+from tensorflow import keras
+from sklearn.metrics.pairwise import cosine_similarity
+
+nltk.download('stopwords')
+data = [
+    "Natural language processing is used to process large amounts of text data.",
+    "NLP helps computers interpret human languages.",
+    "Text preprocessing is an important step in natural language processing.",
+    "Tokenization divides a sentence into smaller units called tokens.",
+    "Stop word removal eliminates commonly used words from text.",
+    "Stemming reduces words to their root form.",
+    "Lemmatization converts words into their meaningful base form.",
+    "Word2Vec is a popular word embedding model.",
+    "Word2Vec converts words into dense numerical vectors.",
+    "There are two main architectures in Word2Vec.",
+    "The two architectures are CBOW and Skip-gram.",
+    "CBOW stands for Continuous Bag of Words.",
+    "CBOW uses surrounding words to predict the missing word.",
+    "Skip-gram predicts surrounding context words using a target word.",
+    "CBOW generally performs well on frequent words.",
+    "Word embeddings capture semantic relationships between words.",
+    "Words with similar meanings often have similar vector representations.",
+    "Cosine similarity measures the similarity between word vectors.",
+    "Neural networks are used to learn word representations.",
+    "Deep learning models can identify patterns in language.",
+    "Recurrent neural networks are used for sequential text processing.",
+    "Long Short-Term Memory networks help capture long-term dependencies.",
+    "Transformers use attention mechanisms to understand contextual relationships.",
+    "Attention mechanisms help models focus on important words.",
+    "BERT is a transformer-based language model.",
+    "GPT is a generative language model.",
+    "Sentiment analysis identifies emotions expressed in text.",
+    "Text classification assigns predefined categories to documents.",
+    "Machine translation converts text from one language to another.",
+    "Chatbots use natural language processing to communicate with users.",
+    "Speech recognition converts spoken language into text.",
+    "Named entity recognition identifies names, locations, organizations, and dates.",
+    "Text summarization generates shorter versions of longer documents.",
+    "Natural language processing is widely used in search engines.",
+    "Spam detection is another application of natural language processing.",
+    "Question answering systems provide answers based on user queries.",
+    "Large language models are trained on massive text datasets.",
+    "The quality of training data affects model performance.",
+    "Data cleaning improves the quality of text datasets.",
+    "A vocabulary contains the unique words present in a corpus.",
+    "A corpus is a collection of text documents.",
+    "The context window defines the surrounding words considered by a model.",
+    "N-grams represent sequences of consecutive words.",
+    "Bigram models consider pairs of consecutive words.",
+    "Unigram models consider individual words.",
+    "Natural language processing combines linguistics and computer science."
+]
+
+
+# stop word removal 
+stop_words = set(nltk.corpus.stopwords.words('english'))
+
+# if for some reason cannot download stop_words 
+# make own stop_words = {"is" , "an" , "are" , "was" , .... }
+
+processed_data = []
+
+for sentence in data:
+    tokens = keras.preprocessing.text.text_to_word_sequence(sentence)
+    tokens = [
+        word for word in tokens
+        if word not in stop_words and word.isalpha()
+    ]
+    processed_data.append(tokens)
+
+
+# convert procsssed text to CBOW 
+# giv surroind word context predict the middle word \
+
+# 1. Create tokenizer
+tokenizer = keras.preprocessing.text.Tokenizer()
+
+# builds a vocab library and assigns a unique integer ID to each word 
+tokenizer.fit_on_texts([" ".join(s) for s in processed_data])
+
+# create word to id mapping 
+word2id = tokenizer.word_index
+
+# create id to word mapping 
+id2word = {}
+
+for word, i in word2id.items():
+    id2word[i] = word
+
+vocab_size = len(word2id) + 1
+
+# 2. Generate CBOW training data
+X, Y = [], []
+window_size = 2 # window size two meaning 2 word before and 2 after targt 
+
+ids = []
+
+for sentence in processed_data:
+    for w in sentence:
+        ids.append(word2id[w])
+
+    # generate context and target word 
+    for i in range(2, len(ids)-2):
+        X.append([ids[i-2], ids[i-1], ids[i+1], ids[i+2]])
+        Y.append(ids[i])
+
+# 3. Convert to NumPy arrays
+X = np.array(X)
+
+
+Y = np.array(Y)
+
+print("X shape:", X.shape)
+print("Y shape:", Y.shape)
+
+
+model = keras.Sequential([
+    keras.layers.Input(shape=(4 ,)),
+    keras.layers.Embedding(vocab_size , 50),
+    keras.layers.Lambda(
+        lambda x: keras.ops.mean(x , axis = 1)
+    ),
+    keras.layers.Dense(vocab_size , activation="softmax")
+])
+
+model.summary()
+
+model.compile(
+    optimizer="adam",
+    loss = "sparse_categorical_crossentropy",
+    metrics=["accuracy"]
+)
+
+es = keras.callbacks.EarlyStopping(
+    patience=3,
+    restore_best_weights=True,
+    monitor="loss"
+)
+
+history = model.fit(
+    X , Y , 
+    epochs=100,
+    batch_size=16,
+    callbacks=[es],
+)
+
+# Extract embeddings
+embeddings = model.layers[0].get_weights()[0]
+
+def similar_word(word, top_n=5):
+
+    word_id = word2id[word]
+
+    vector = embeddings[word_id].reshape(1, -1)
+
+    score = cosine_similarity(vector, embeddings)[0]
+
+    similar_ids = np.argsort(score)[::-1][1:top_n+1]
+
+    for i in similar_ids:
+        print(id2word[i], score[i])
+
+
+similar_word("language", 5)
+
+similar_word("computer", 5)
