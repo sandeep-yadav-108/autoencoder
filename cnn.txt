@@ -1,0 +1,105 @@
+import numpy as np
+from tensorflow import keras 
+import matplotlib.pyplot as plt 
+
+data = np.load('cifar-10-python.npz')
+
+x_train , y_train = data['x_train'] , data['y_train']
+x_test , y_test = data['x_test'] , data['y_test']
+
+
+x_train = x_train.astype('float32') / 255.0
+x_test = x_test.astype('float32') / 255.0
+
+plt.figure(figsize=(12 , 6))
+
+for i in range(10):
+    index = np.where(y_train.flatten() == i)[0][0]
+    plt.subplot(2 , 5 , i + 1)
+    plt.imshow(x_train[index])
+    plt.title(f"label : {i}")
+
+class_names = ["airplane" , "automobile" , "bird" , "cat" , "deer" , "dog" , "frog" , "horse" , "ship" , "truck"]
+
+plt.figure(figsize=(12 , 6))
+
+for i in range(10):
+    index = np.where(y_train.flatten() == i)[0][0]
+    plt.subplot(2 , 5 , i + 1)
+    plt.imshow(x_train[index])
+    plt.title(f"{i} : {class_names[i]}")
+
+model = keras.Sequential([
+    keras.Input(shape=(32 , 32 , 3)),
+    keras.layers.Conv2D(32 , (3 , 3) , activation='relu'),
+    keras.layers.MaxPooling2D((2 , 2)),
+    keras.layers.Flatten(),
+    keras.layers.Dense(64 , activation='relu'),
+    keras.layers.Dropout(0.2),
+    keras.layers.Dense(10 , activation="softmax")
+])
+
+model.summary()
+#fnn
+# architecture 
+# model = keras.Sequential([
+#     keras.Input(shape=(32, 32, 3)),
+#     keras.layers.Flatten(),
+#     keras.layers.Dense(512, activation="relu"),
+#     keras.layers.Dense(256, activation="relu"),
+#     keras.layers.Dense(128, activation="relu"),
+#     keras.layers.Dense(10, activation="softmax")
+# ])
+# model.summary()
+
+model.compile(
+    optimizer='adam',
+    loss="sparse_categorical_crossentropy",
+    metrics=["accuracy"]
+)
+
+es = keras.callbacks.EarlyStopping(
+    monitor="val_loss",
+    patience=3,
+    restore_best_weights=True
+)
+
+history = model.fit(
+    x_train , y_train , 
+    epochs=20,
+    batch_size=32,
+    validation_split=0.2,
+    callbacks=[es]
+)
+
+loss , acc = model.evaluate(x_test , y_test)
+
+plt.figure(figsize=(12, 5))
+
+plt.subplot(1, 2, 1)
+plt.plot(history.history["accuracy"], label="Training Accuracy")
+plt.plot(history.history["val_accuracy"], label="Validation Accuracy")
+plt.xlabel("Epoch")
+plt.ylabel("Accuracy")
+plt.title("Model Accuracy")
+plt.legend()
+
+plt.subplot(1, 2, 2)
+plt.plot(history.history["loss"], label="Training Loss")
+plt.plot(history.history["val_loss"], label="Validation Loss")
+plt.xlabel("Epoch")
+plt.ylabel("Loss")
+plt.title("Model Loss")
+plt.legend()
+
+plt.tight_layout()
+plt.show()
+
+index = 12
+
+prediction = model.predict(x_test[index:index+1])
+predicted_class = np.argmax(prediction[0])
+
+print("Predicted class:", class_names[predicted_class])
+print("Actual class:", class_names[int(y_test[index].squeeze())])
+plt.imshow(x_test[index])
